@@ -1,53 +1,44 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+import lyricsgenius
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import re
 
-# Get your Genius token from secrets
-GENIUS_API_TOKEN = st.secrets["GENIUS_API_TOKEN"]
+# Genius API
+genius = lyricsgenius.Genius(st.secrets["GENIUS_API_TOKEN"],timeout=15)
+genius.skip_non_songs = True
+genius.excluded_terms = ["(Remix)", "(Live)"]
 
-def search_genius_song(query):
-    headers = {"Authorization": f"Bearer {GENIUS_API_TOKEN}"}
-    params = {"q": query}
-    response = requests.get("https://api.genius.com/search", params=params, headers=headers)
-    if response.status_code != 200:
-        return None
-    hits = response.json()["response"]["hits"]
-    for hit in hits:
-        if hit["result"]["primary_artist"]["name"].lower() == "taylor swift":
-            return hit["result"]["url"]
-    return None
-
-def get_lyrics_from_url(song_url):
-    page = requests.get(song_url)
-    soup = BeautifulSoup(page.text, "html.parser")
-    lyrics_div = soup.find("div", class_="Lyrics__Root-sc-1ynbvzw-0")
-    if not lyrics_div:
-        # fallback for older layout
-        lyrics_div = soup.find("div", class_="lyrics")
-    if lyrics_div:
-        return lyrics_div.get_text(separator="\n").strip()
-    return "Lyrics not found."
-
-st.title("🎤 Taylor Swift Lyrics & WordCloud")
+# Streamlit App
+st.title("🎤 Taylor Swift Lyrics Explorer")
 
 song_title = st.text_input("Enter a Taylor Swift song title")
-
+def clean_lyrics(raw_lyrics):
+    # Find the first [Verse ...] or [Intro] or similar section
+    match = re.search(r"\[.*?\]", raw_lyrics)
+    if match:
+        start_index = match.start()
+        return raw_lyrics[start_index:].strip()
+    return raw_lyrics.strip()  # fallback if no section headings found
 if st.button("Get Lyrics"):
-    with st.spinner("Searching and fetching lyrics..."):
-        song_url = search_genius_song(song_title)
-        if song_url:
-            lyrics = get_lyrics_from_url(song_url)
-            st.text_area("Lyrics", lyrics, height=400)
+    with st.spinner("Fetching lyrics..."):
+        try:
+            song = genius.search_song(song_title, artist="Taylor Swift")
+            if song:
+                lyrics = clean_lyrics(song.lyrics)
+                st.subheader("Lyrics for: " + song.title)
+                st.text_area("Lyrics", lyrics, height=400)
 
-            # Word Cloud
-            wordcloud = WordCloud(width=800, height=300, background_color="white").generate(lyrics)
-            st.subheader("Word Cloud")
-            fig, ax = plt.subplots()
-            ax.imshow(wordcloud, interpolation="bilinear")
-            ax.axis("off")
-            st.pyplot(fig)
-        else:
-            st.error("Song not found or lyrics not available.")
+
+                # Generate word cloud
+                wordcloud = WordCloud(width=800, height=400, background_color="white").generate(song.lyrics)
+                st.subheader("Word Cloud")
+                fig, ax = plt.subplots()
+                ax.imshow(wordcloud, interpolation="bilinear")
+                ax.axis("off")
+                st.pyplot(fig)
+            else:
+                st.error("Song not found.")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
