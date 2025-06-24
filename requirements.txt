@@ -1,4 +1,4 @@
 streamlit
-lyricsgenius
+lyricsgenius==3.0.1
 wordcloud
 matplotlib
