@@ -50,3 +50,4 @@ if st.button("Get Lyrics"):
             st.pyplot(fig)
         else:
             st.error("Song not found or lyrics not available.")
+
